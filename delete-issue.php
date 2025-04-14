@@ -21,7 +21,18 @@ if ($issueId <= 0) {
     exit;
 }
 
-// Check if the current user is the creator of the issue
+// Check if the user is an admin
+$isAdmin = false;
+$stmt = $conn->prepare("SELECT username FROM users WHERE id = ? AND username = 'admin'");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$adminResult = $stmt->get_result();
+if ($adminResult->num_rows > 0) {
+    $isAdmin = true;
+}
+$stmt->close();
+
+// Get the issue creator
 $stmt = $conn->prepare("SELECT created_by FROM issues WHERE id = ?");
 $stmt->bind_param("i", $issueId);
 $stmt->execute();
@@ -36,9 +47,9 @@ if ($result->num_rows === 0) {
 $issue = $result->fetch_assoc();
 $stmt->close();
 
-// Verify that the current user is the creator of the issue
-if ($_SESSION['user_id'] != $issue['created_by']) {
-    // User is not the creator, redirect to dashboard
+// Verify that the current user is the creator of the issue or an admin
+if ($_SESSION['user_id'] != $issue['created_by'] && !$isAdmin) {
+    // User is not the creator or admin, redirect to dashboard
     header('Location: dashboard.php');
     exit;
 }
@@ -50,8 +61,15 @@ $stmt->execute();
 $stmt->close();
 
 // Now delete the issue
-$stmt = $conn->prepare("DELETE FROM issues WHERE id = ? AND created_by = ?");
-$stmt->bind_param("ii", $issueId, $_SESSION['user_id']);
+if ($isAdmin) {
+    // Admin can delete any issue
+    $stmt = $conn->prepare("DELETE FROM issues WHERE id = ?");
+    $stmt->bind_param("i", $issueId);
+} else {
+    // Regular user can only delete their own issues
+    $stmt = $conn->prepare("DELETE FROM issues WHERE id = ? AND created_by = ?");
+    $stmt->bind_param("ii", $issueId, $_SESSION['user_id']);
+}
 
 if ($stmt->execute()) {
     // Issue deleted successfully, redirect to dashboard

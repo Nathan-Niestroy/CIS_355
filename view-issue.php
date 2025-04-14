@@ -25,10 +25,28 @@ if ($issueId <= 0) {
 $message = '';
 $error = '';
 
+// Check if the user is an admin
+$isAdmin = false;
+$stmt = $conn->prepare("SELECT username FROM users WHERE id = ? AND username = 'admin'");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$adminResult = $stmt->get_result();
+if ($adminResult->num_rows > 0) {
+    $isAdmin = true;
+}
+$stmt->close();
+
 // Handle issue resolution
 if (isset($_POST['resolve_issue']) && $_POST['resolve_issue'] === '1') {
-    $stmt = $conn->prepare("UPDATE issues SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?");
-    $stmt->bind_param("ii", $issueId, $_SESSION['user_id']);
+    if ($isAdmin) {
+        // Admin can resolve any issue
+        $stmt = $conn->prepare("UPDATE issues SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ?");
+        $stmt->bind_param("i", $issueId);
+    } else {
+        // Regular user can only resolve their own issues
+        $stmt = $conn->prepare("UPDATE issues SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?");
+        $stmt->bind_param("ii", $issueId, $_SESSION['user_id']);
+    }
     
     if ($stmt->execute()) {
         $message = 'Issue marked as resolved successfully';
@@ -105,7 +123,7 @@ if ($commentsResult->num_rows > 0) {
 $stmt->close();
 $conn->close();
 
-// Check if current user is the issue creator
+// Check if current user is the issue creator or admin
 $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
 ?>
 
@@ -133,6 +151,8 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
             --resolved-badge-text: #444444; /* Dark gray for resolved badge text */
             --error-text: #ff0000; /* Red for error messages */
             --error-bg: #ffeeee; /* Light red for error backgrounds */
+            --admin-badge-bg: #ffeecc; /* Light yellow for admin badge */
+            --admin-badge-text: #cc6600; /* Orange for admin badge text */
         }
         
         body {
@@ -163,6 +183,16 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
         
         .navbar-user span {
             margin-right: 15px;
+        }
+        
+        .navbar-user .admin-badge {
+            background-color: var(--admin-badge-bg);
+            color: var(--admin-badge-text);
+            padding: 4px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
         }
         
         .navbar-user button {
@@ -359,12 +389,35 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
             text-align: center;
             font-weight: 500;
         }
+        
+        /* Admin styling */
+        .admin-actions {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--admin-badge-bg);
+            border-radius: 8px;
+            border: 1px solid var(--admin-badge-text);
+        }
+        
+        .admin-actions h3 {
+            color: var(--admin-badge-text);
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .admin-actions .btn {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="navbar">
         <h1>Department Issues</h1>
         <div class="navbar-user">
+            <?php if ($isAdmin): ?>
+            <span class="admin-badge">ADMIN</span>
+            <?php endif; ?>
             <span>Welcome, <?php echo htmlspecialchars($_SESSION['first_name'] . ' ' . $_SESSION['last_name']); ?></span>
             <button id="logout-btn">Logout</button>
         </div>
@@ -402,7 +455,7 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
             <div class="issue-actions">
                 <a href="dashboard.php" class="btn btn-secondary">Back to Dashboard</a>
                 
-                <?php if ($isCreator): ?>
+                <?php if ($isCreator || $isAdmin): ?>
                 <div>
                     <?php if ($issue['status'] === 'open'): ?>
                     <form method="POST" style="display: inline;">
@@ -410,10 +463,18 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
                         <button type="submit" class="btn" onclick="return confirm('Are you sure you want to mark this issue as resolved?')">Mark as Resolved</button>
                     </form>
                     <?php endif; ?>
+                    
                     <a href="delete-issue.php?id=<?php echo $issueId; ?>" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this issue? This action cannot be undone.')">Delete Issue</a>
                 </div>
                 <?php endif; ?>
             </div>
+            
+            <?php if ($isAdmin && !$isCreator): ?>
+            <div class="admin-actions">
+                <h3>Admin Actions</h3>
+                <p>You are viewing this issue as an administrator. You can manage this issue even though you didn't create it.</p>
+            </div>
+            <?php endif; ?>
         </div>
         
         <div class="comments-section">
@@ -425,7 +486,13 @@ $isCreator = ($_SESSION['user_id'] == $issue['created_by']);
                 <?php foreach ($comments as $comment): ?>
                 <div class="comment">
                     <div class="comment-header">
-                        <span class="comment-author"><?php echo htmlspecialchars($comment['first_name'] . ' ' . $comment['last_name']); ?> (@<?php echo htmlspecialchars($comment['username']); ?>)</span>
+                        <span class="comment-author">
+                            <?php echo htmlspecialchars($comment['first_name'] . ' ' . $comment['last_name']); ?> 
+                            (@<?php echo htmlspecialchars($comment['username']); ?>)
+                            <?php if ($comment['username'] === 'admin'): ?>
+                            <span class="admin-badge">ADMIN</span>
+                            <?php endif; ?>
+                        </span>
                         <span class="comment-time"><?php echo date('F j, Y, g:i a', strtotime($comment['created_at'])); ?></span>
                     </div>
                     <div class="comment-content">

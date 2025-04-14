@@ -13,6 +13,17 @@ if (!isset($_SESSION['user_id'])) {
 // Include database configuration
 $conn = require_once 'db-config.php';
 
+// Check if user is admin
+$isAdmin = false;
+$stmt = $conn->prepare("SELECT username FROM users WHERE id = ? AND username = 'admin'");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$adminResult = $stmt->get_result();
+if ($adminResult->num_rows > 0) {
+    $isAdmin = true;
+}
+$stmt->close();
+
 // Get all issues
 $sql = "SELECT i.*, u.first_name, u.last_name, u.username, 
         (SELECT COUNT(*) FROM comments WHERE issue_id = i.id) AS comment_count 
@@ -42,458 +53,479 @@ $defaultView = 'card';
     <meta name="theme-color" content="#ff0000">
     <title>Department Issues Dashboard</title>
     <style>
+        /* Clean Dashboard CSS - Reorganized */
         :root {
-            --primary: #ff0000; /* Red */
-            --primary-dark: #cc0000; 
-            --secondary: #000000; /* Black */
-            --text: #000000; /* Black text */
-            --background: #ffffff; /* White background */
-            --light-bg: #f5f5f5; /* Light gray background */
-            --border: #dddddd; /* Light border */
-            --danger: #ff0000; /* Red for danger buttons */
-            --success: #444444; /* Dark gray for success messages */
-            --info: #222222; /* Very dark gray for info */
-            --open-badge-bg: #ffeeee; /* Light red for open badges */
-            --open-badge-text: #cc0000; /* Dark red for open badge text */
-            --resolved-badge-bg: #eeeeee; /* Light gray for resolved badges */
-            --resolved-badge-text: #444444; /* Dark gray for resolved badge text */
-            --error-text: #ff0000; /* Red for error messages */
-            --error-bg: #ffeeee; /* Light red for error backgrounds */
+            /* Color Variables */
+            --primary: #ff0000;
+            --primary-dark: #cc0000;
+            --secondary: #000000;
+            --text: #000000;
+            --background: #ffffff;
+            --light-bg: #f5f5f5;
+            --border: #dddddd;
+            
+            /* Status Colors */
+            --open-badge-bg: #ffeeee;
+            --open-badge-text: #cc0000;
+            --resolved-badge-bg: #eeeeee;
+            --resolved-badge-text: #444444;
+            --admin-badge-bg: #ffeecc;
+            --admin-badge-text: #cc6600;
+            
+            /* Utility Colors */
+            --success: #444444;
+            --info: #222222;
+            --danger: #ff0000;
+            --error-text: #ff0000;
+            --error-bg: #ffeeee;
+            
+            /* Effects */
+            --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            --card-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+            --transition-speed: 0.2s;
         }
-        
+
+        /* Base Styles */
         * {
             box-sizing: border-box;
-            tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
             -webkit-tap-highlight-color: transparent;
         }
-        
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--light-bg);
-            margin: 0;
-            padding: 0;
+            color: var(--text);
+            line-height: 1.6;
             min-width: 320px;
             overscroll-behavior-y: contain;
         }
-        
+
+        /* Layout Components */
+        .container {
+            max-width: 1200px;
+            margin: 1.5rem auto;
+            padding: 0 1.5rem;
+        }
+
+        /* Navbar Styles */
         .navbar {
             background-color: var(--primary);
-            padding: 15px 20px;
+            color: var(--background);
+            padding: 1rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: var(--background);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
-        
+
         .navbar h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
             margin: 0;
-            font-size: 24px;
-            font-weight: bold;
         }
-        
+
         .navbar-user {
             display: flex;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
+            gap: 1rem;
         }
-        
-        .navbar-user span {
-            margin-right: 15px;
-            max-width: 200px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .navbar-user button {
-            background-color: black;
-            color: white;
+
+        /* Button Styles */
+        .btn {
+            background-color: var(--primary);
+            color: var(--background);
             border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
+            padding: 0.75rem 1rem;
+            border-radius: 0.375rem;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            text-decoration: none;
             cursor: pointer;
-            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all var(--transition-speed);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 20px auto;
-            padding: 0 20px;
+
+        .btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
         }
-        
+
+        /* Logout Button */
+        .navbar-user button {
+            background-color: var(--secondary);
+            color: var(--background);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background-color var(--transition-speed);
+        }
+
+        .navbar-user button:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        /* Action Buttons Section */
         .actions {
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
-            margin-bottom: 20px;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
-        
+
         .action-left, .action-right {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 0.5rem;
         }
-        
+
+        /* Filter Buttons */
         .filter-btn {
             background-color: var(--background);
             color: #666;
             border: 1px solid var(--border);
-            padding: 8px 15px;
-            border-radius: 6px;
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.375rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 0.5rem;
+            font-size: 0.875rem;
             font-weight: 500;
-            font-size: 14px;
-            transition: all 0.2s ease;
+            transition: all var(--transition-speed);
         }
-        
+
         .filter-btn:hover {
             border-color: #bbb;
             color: #444;
             background-color: #f9f9f9;
         }
-        
+
         .filter-btn.active {
             background-color: var(--primary);
             color: var(--background);
             border-color: var(--primary);
-            box-shadow: 0 2px 5px rgba(204, 0, 0, 0.2);
+            box-shadow: 0 1px 3px rgba(204, 0, 0, 0.2);
         }
-        
+
         .filter-btn.active:hover {
             background-color: var(--primary-dark);
         }
-        
-        .btn {
-            background-color: var(--primary);
-            color: var(--background);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 15px;
-            font-weight: 500;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 5px rgba(204, 0, 0, 0.2);
-        }
-        
-        .btn:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(204, 0, 0, 0.3);
-        }
-        
-        /* Toggle View Buttons */
+
+        /* View Toggle */
         .view-toggle {
             display: flex;
-            gap: 5px;
+            gap: 0.375rem;
         }
-        
+
         .toggle-btn {
             background-color: var(--background);
             color: #666;
             border: 1px solid var(--border);
-            padding: 6px 12px;
-            border-radius: 4px;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 5px;
-            font-size: 14px;
+            gap: 0.375rem;
+            font-size: 0.875rem;
+            transition: all var(--transition-speed);
         }
-        
+
         .toggle-btn.active {
             background-color: var(--primary);
             color: var(--background);
             border-color: var(--primary);
         }
-        
-        /* Card View Styles */
+
+        /* Badge Styles */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-right: 1rem;
+        }
+
+        .badge-open {
+            background-color: var(--open-badge-bg);
+            color: var(--open-badge-text);
+        }
+
+        .badge-resolved {
+            background-color: var(--resolved-badge-bg);
+            color: var(--resolved-badge-text);
+        }
+
+        .admin-badge, .badge-admin {
+            background-color: var(--admin-badge-bg);
+            color: var(--admin-badge-text);
+            font-size: 0.625rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 1rem;
+            text-transform: uppercase;
+        }
+
+        .admin-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .badge-admin {
+            margin-left: 0.375rem;
+        }
+
+        /* Card header styles - with improved spacing */
+        .card-header {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0.75rem;
+        }
+
+        .card-header .badge {
+            margin-bottom: 0.75rem;
+            align-self: flex-start;
+        }
+
+        .card-header h2 {
+            font-size: 1.125rem;
+            line-height: 1.4;
+            color: var(--text);
+            margin: 0;
+        }
+
+        /* Card View */
         .issues-container.card-view {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
+            gap: 1.25rem;
         }
-        
+
         .card-view .issue-card {
             background-color: var(--background);
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
-            padding: 20px;
+            border-radius: 0.5rem;
+            box-shadow: var(--card-shadow);
+            padding: 1.5rem;
             display: flex;
             flex-direction: column;
+            transition: all var(--transition-speed);
+            position: relative;
+            height: 100%;
         }
-        
-        .card-view .open-issue .badge-open {
-            display: inline-block;
-            margin-bottom: 15px;
+
+        .card-view .issue-card:hover {
+            box-shadow: var(--card-hover-shadow);
+            transform: translateY(-2px);
         }
-        
-        .card-view .resolved-issue .badge-resolved {
-            display: inline-block;
-            margin-bottom: 15px;
+
+        .card-view .open-issue {
+            border-top: 3px solid var(--open-badge-text);
         }
-        
-        .card-view .issue-card h2 {
-            margin-top: 0;
-            margin-bottom: 12px;
-            font-size: 18px;
-            color: var(--text);
-            line-height: 1.3;
+
+        .card-view .resolved-issue {
+            border-top: 3px solid var(--resolved-badge-text);
         }
-        
+
         .card-view .issue-meta {
-            font-size: 14px;
+            font-size: 0.875rem;
             color: #666;
-            margin-bottom: 15px;
-            line-height: 1.4;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            clear: both;
         }
-        
+
         .card-view .issue-card p {
             color: var(--text);
-            margin-bottom: 15px;
+            margin-bottom: 1rem;
             display: -webkit-box;
             -webkit-box-orient: vertical;
             -webkit-line-clamp: 3;
             overflow: hidden;
             line-height: 1.5;
+            flex-grow: 1;
         }
-        
-        .card-view .issue-footer {
-            display: none;
-        }
-        
-        .card-view .comments-count {
-            margin-bottom: 15px;
-        }
-        
-        .card-view .list-view-badge {
-            display: none;
-        }
-        
+
         .card-view .view-details {
             margin-top: auto;
         }
-        
+
         .card-view .view-details .btn {
             width: 100%;
             text-align: center;
-            box-sizing: border-box;
         }
-        
-        .badge {
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-            display: inline-block;
-        }
-        
-        .badge-open {
-            background-color: var(--open-badge-bg);
-            color: var(--open-badge-text);
-        }
-        
-        .badge-resolved {
-            background-color: var(--resolved-badge-bg);
-            color: var(--resolved-badge-text);
-        }
-        
-        .comments-count {
-            display: flex;
-            align-items: center;
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .comments-count svg {
-            margin-right: 5px;
-        }
-        
-        /* List View Styles */
+
+        /* List View */
         .issues-container.list-view {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 0.75rem;
         }
-        
+
         .list-view .issue-card {
+            background-color: var(--background);
+            border-radius: 0.5rem;
+            box-shadow: var(--card-shadow);
+            padding: 1rem 1.5rem;
             display: flex;
             align-items: center;
-            padding: 15px;
-            border-radius: 8px;
-            background-color: var(--background);
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-        }
-        
-        .list-view .badge {
-            min-width: 70px;
-            text-align: center;
-            margin-right: 15px;
-            flex-shrink: 0;
-        }
-        
-        .list-view .issue-card h2 {
-            margin: 0;
-            flex: 1;
-            font-size: 16px;
-            font-weight: 600;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .list-view .issue-meta {
-            width: 220px;
-            margin: 0 15px;
-            font-size: 13px;
-            line-height: 1.4;
-            flex-shrink: 0;
-        }
-        
-        .list-view .comments-count {
-            margin: 0 15px 0 0;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        
-        .list-view p {
-            display: none;
-        }
-        
-        .list-view .view-details .btn {
-            padding: 6px 12px;
-            font-size: 14px;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        
-        .list-view .issue-card {
-            display: flex;
-            align-items: center;
-            padding: 16px 20px;
-            border-radius: 8px;
-            background-color: var(--background);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-            transition: all 0.2s ease;
+            transition: all var(--transition-speed);
             position: relative;
             overflow: hidden;
+            gap: 1.5rem; /* Increased gap between items */
         }
-        
+
         .list-view .issue-card:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            box-shadow: var(--card-hover-shadow);
+            transform: translateY(-1px);
         }
-        
-        .list-view .issue-card.open-issue::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background-color: var(--open-badge-text);
-        }
-        
+
+        .list-view .issue-card.open-issue::before,
         .list-view .issue-card.resolved-issue::before {
             content: "";
             position: absolute;
             left: 0;
             top: 0;
             bottom: 0;
-            width: 4px;
+            width: 0.25rem;
+        }
+
+        .list-view .issue-card.open-issue::before {
+            background-color: var(--open-badge-text);
+        }
+
+        .list-view .issue-card.resolved-issue::before {
             background-color: var(--resolved-badge-text);
         }
-        
-        .list-view .list-view-badge {
-            min-width: 70px;
+
+        /* Badge in list view */
+        .list-view .badge {
+            min-width: 4.5rem;
             text-align: center;
-            margin-right: 18px;
             flex-shrink: 0;
+            margin-bottom: 0;
+            margin-right: 0;
+            padding: 0.375rem 0.75rem; /* Slightly larger padding */
         }
-        
+
+        /* Title in list view */
         .list-view .issue-card h2 {
             margin: 0;
             flex: 1;
-            min-width: 200px;
-            font-size: 16px;
+            min-width: 12.5rem;
+            font-size: 1rem;
             font-weight: 600;
-            padding-right: 15px;
+            padding-right: 1rem;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        
+
+        /* Metadata in list view */
         .list-view .issue-meta {
-            width: 280px;
-            margin: 0 25px 0 0;
-            font-size: 13px;
-            line-height: 1.4;
+            width: 16rem;
+            font-size: 0.8125rem;
             color: #666;
             flex-shrink: 0;
-        }
-        
-        .list-view .comments-count {
-            margin: 0 25px 0 0;
-            white-space: nowrap;
-            color: #666;
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            gap: 0.125rem;
+        }
+
+        /* Comments count in list view */
+        .list-view .comments-count {
+            margin: 0;
+            white-space: nowrap;
             flex-shrink: 0;
         }
-        
-        .list-view .comments-count svg {
-            margin-right: 6px;
-        }
-        
+
+        /* Hide description in list view */
         .list-view p {
             display: none;
         }
-        
-        .list-view .view-details .btn {
-            padding: 8px 16px;
-            font-size: 14px;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-        
-        .list-view .view-details .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-        }
-        
-        .list-view .issue-footer {
-            display: none;
-        }
-        
-        /* No issues message */
-        .no-issues {
-            text-align: center;
-            padding: 40px 0;
-            color: var(--text);
-        }
-        
-        /* Error message display */
-        .error-message {
-            color: var(--error-text);
-            margin-top: 20px;
-            padding: 10px;
-            background-color: var(--error-bg);
-            border-radius: 4px;
+
+        /* View details button positioning */
+        .list-view .view-details {
+            margin-left: auto;
         }
 
-        /* Responsive adjustments */
+        .list-view .view-details .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* Common Components */
+        .author-admin {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .comments-count {
+            display: flex;
+            align-items: center;
+            color: #666;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            gap: 0.375rem;
+        }
+
+        .admin-actions-available {
+            position: absolute;
+            top: 0.625rem;
+            right: 0.625rem;
+            background-color: var(--admin-badge-bg);
+            color: var(--admin-badge-text);
+            font-size: 0.625rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.625rem;
+            opacity: 0.9;
+        }
+
+        /* Message Styles */
+        .no-issues {
+            text-align: center;
+            padding: 2.5rem;
+            background-color: var(--background);
+            border-radius: 0.5rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        .no-issues h2 {
+            margin-bottom: 0.75rem;
+            color: var(--text);
+        }
+
+        .error-message {
+            color: var(--error-text);
+            padding: 1rem;
+            background-color: var(--error-bg);
+            border-radius: 0.5rem;
+            margin-bottom: 1.25rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        /* Responsive Styles */
         @media screen and (max-width: 768px) {
             .navbar {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 10px;
-                padding: 15px;
+                gap: 0.75rem;
+                padding: 1rem;
             }
             
             .navbar-user {
@@ -515,37 +547,49 @@ $defaultView = 'card';
             .action-left .filter-btn,
             .action-right .toggle-btn {
                 width: 100%;
-                text-align: center;
                 justify-content: center;
             }
             
-            .card-view.issues-container {
+            .issues-container.card-view {
                 grid-template-columns: 1fr;
             }
             
             .list-view .issue-card {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 0.75rem;
+                padding: 1rem;
             }
             
-            .list-view .comments-count {
-                margin-left: 0;
-                width: 100%;
+            .list-view .badge {
+                margin-bottom: 0.5rem;
             }
-
-            .navbar h1 {
-                font-size: 20px;
+            
+            .list-view .issue-card h2,
+            .list-view .issue-meta,
+            .list-view .comments-count {
+                width: 100%;
+                margin: 0.25rem 0;
+            }
+            
+            .list-view .view-details {
+                width: 100%;
+                margin-top: 0.5rem;
+                margin-left: 0;
+            }
+            
+            .list-view .view-details .btn {
+                width: 100%;
+                display: block;
+                text-align: center;
             }
         }
 
-        /* Mobile-specific touch improvements */
+        /* Touch Device Improvements */
         @media (pointer: coarse) {
             .btn, .filter-btn, .toggle-btn {
-                min-height: 44px;
-                min-width: 44px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
+                min-height: 2.75rem;
+                min-width: 2.75rem;
             }
         }
     </style>
@@ -554,6 +598,9 @@ $defaultView = 'card';
     <div class="navbar">
         <h1>Department Issues</h1>
         <div class="navbar-user">
+            <?php if ($isAdmin): ?>
+            <span class="admin-badge">ADMIN</span>
+            <?php endif; ?>
             <span>Welcome, <?php echo htmlspecialchars($_SESSION['first_name'] . ' ' . $_SESSION['last_name']); ?></span>
             <button id="logout-btn">Logout</button>
         </div>
@@ -566,7 +613,13 @@ $defaultView = 'card';
         
         <div class="actions">
             <div class="action-left">
-                <a href="create-issue.php" class="btn">Create New Issue</a>
+                <a href="create-issue.php" class="btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Create New Issue
+                </a>
                 
                 <button id="filter-all-btn" class="filter-btn active">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -623,34 +676,57 @@ $defaultView = 'card';
         <div id="issues-container" class="issues-container card-view">
             <?php foreach ($issues as $issue): ?>
             <div class="issue-card <?php echo $issue['status'] === 'open' ? 'open-issue' : 'resolved-issue'; ?>">
-                <?php if ($issue['status'] === 'open'): ?>
-                <span class="badge badge-open">Open</span>
-                <?php else: ?>
-                <span class="badge badge-resolved">Resolved</span>
-                <?php endif; ?>
-                
-                <h2><?php echo htmlspecialchars($issue['title']); ?></h2>
+                <div class="card-header">
+                    <?php if ($issue['status'] === 'open'): ?>
+                    <span class="badge badge-open">Open</span>
+                    <?php else: ?>
+                    <span class="badge badge-resolved">Resolved</span>
+                    <?php endif; ?>
+                    
+                    <h2><?php echo htmlspecialchars($issue['title']); ?></h2>
+                </div>
                 
                 <div class="issue-meta">
-                    By <?php echo htmlspecialchars($issue['first_name'] . ' ' . $issue['last_name']); ?> (@<?php echo htmlspecialchars($issue['username']); ?>)
-                    <br>
-                    <?php echo date('F j, Y, g:i a', strtotime($issue['created_at'])); ?>
+                    <div class="author-admin">
+                        By <?php echo htmlspecialchars($issue['first_name'] . ' ' . $issue['last_name']); ?>
+                        <?php if ($issue['username'] === 'admin'): ?>
+                        <span class="badge-admin">ADMIN</span>
+                        <?php endif; ?>
+                    </div>
+                    <div>(@<?php echo htmlspecialchars($issue['username']); ?>)</div>
+                    <div><?php echo date('F j, Y, g:i a', strtotime($issue['created_at'])); ?></div>
                 </div>
                 
                 <p><?php echo htmlspecialchars(substr($issue['description'], 0, 150)) . (strlen($issue['description']) > 150 ? '...' : ''); ?></p>
                 
                 <div class="comments-count">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     <?php echo $issue['comment_count']; ?> comments
                 </div>
+                
+                <?php if ($isAdmin && $_SESSION['user_id'] != $issue['created_by']): ?>
+                <div class="admin-actions-available">Admin Actions</div>
+                <?php endif; ?>
                 
                 <div class="view-details">
                     <a href="view-issue.php?id=<?php echo $issue['id']; ?>" class="btn">View Details</a>
                 </div>
             </div>
             <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        
+        <?php if ($isAdmin): ?>
+        <div class="no-issues" id="no-filtered-issues" style="display: none;">
+            <h2>No matching issues found</h2>
+            <p>No issues match the current filter. As an admin, you can view and manage all issues in the system.</p>
+        </div>
+        <?php else: ?>
+        <div class="no-issues" id="no-filtered-issues" style="display: none;">
+            <h2>No matching issues found</h2>
+            <p>No issues match the current filter. Try a different filter or create a new issue.</p>
         </div>
         <?php endif; ?>
     </div>
@@ -792,6 +868,6 @@ $defaultView = 'card';
                 window.location.href = 'index.php';
             });
         });
-    </script>
-</body>
+        </script>
+    </body>
 </html>
